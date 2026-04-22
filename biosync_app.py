@@ -28,19 +28,19 @@ def F(s=10, w="normal"): return (FF, s, w)
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE) as f:
+        with open(CONFIG_FILE, encoding="utf-8") as f:
             return json.load(f)
     return {"folder_path":"","file_name":"eTimeTrackLite1.mdb",
             "schedule_type":"hour","schedule_value":"1",
             "prev_synced_date":"","url":"","username":"","password":""}
 
 def save_config(cfg):
-    with open(CONFIG_FILE,"w") as f: json.dump(cfg,f,indent=4)
+    with open(CONFIG_FILE,"w", encoding="utf-8") as f: json.dump(cfg,f,indent=4)
 
 def write_log(msg, box=None):
     ts   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}\n"
-    with open(LOG_FILE,"a") as f: f.write(line)
+    with open(LOG_FILE,"a", encoding="utf-8") as f: f.write(line)
     if box:
         try:
             box.config(state="normal")
@@ -395,7 +395,7 @@ class App:
                                                relief="flat",wrap="word",padx=12,pady=8)
         self.log_box.pack(fill="both",expand=True,padx=16,pady=(0,16))
         if os.path.exists(LOG_FILE):
-            with open(LOG_FILE) as f: txt=f.read()
+            with open(LOG_FILE, encoding="utf-8", errors="ignore") as f: txt=f.read()
             self.log_box.config(state="normal")
             self.log_box.insert("end",txt)
             self.log_box.see("end")
@@ -437,7 +437,7 @@ class App:
         write_log("Prev synced date cleared — next sync sends ALL data",self.log_box)
 
     def _clear_logs(self):
-        open(LOG_FILE,"w").close()
+        open(LOG_FILE,"w", encoding="utf-8").close()
         self.log_box.config(state="normal"); self.log_box.delete("1.0","end")
         self.log_box.config(state="disabled")
 
@@ -456,7 +456,6 @@ class App:
         threading.Thread(target=self._run_fetch,args=(f,t,False),daemon=True).start()
 
     def _sync_now(self):
-        self._save()
         threading.Thread(target=self._run_scheduled,daemon=True).start()
 
     def _run_fetch(self,from_dt,to_dt,update_prev):
@@ -482,16 +481,24 @@ class App:
         self._set_status("⬤  Idle","#7f8c8d")
 
     def _update_prev(self):
-        s=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.cfg["prev_synced_date"]=s; self.v_prev.set(s); save_config(self.cfg)
-        write_log(f"✅ prev_synced_date → {s}",self.log_box)
+        s = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cfg["prev_synced_date"] = s
+        save_config(self.cfg)
+        # Must update UI from main thread
+        self.root.after(0, lambda: self.v_prev.set(s))
+        write_log(f"✅ prev_synced_date → {s}", self.log_box)
 
     def _run_scheduled(self):
-        prev=self.cfg.get("prev_synced_date",""); from_dt=None; to_dt=datetime.now()
+        # Read prev_synced_date directly from saved config file (not from UI)
+        # to avoid race condition when _save() is called before thread starts
+        fresh_cfg = load_config()
+        prev    = fresh_cfg.get("prev_synced_date", "")
+        from_dt = None
+        to_dt   = datetime.now()
         if prev:
-            try: from_dt=datetime.strptime(prev,"%Y-%m-%d %H:%M:%S")
+            try: from_dt = datetime.strptime(prev, "%Y-%m-%d %H:%M:%S")
             except: pass
-        self._run_fetch(from_dt,to_dt,update_prev=True)
+        self._run_fetch(from_dt, to_dt, update_prev=True)
 
 
 if __name__=="__main__":
