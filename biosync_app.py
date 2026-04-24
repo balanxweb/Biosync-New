@@ -61,7 +61,7 @@ def fetch_punches(mdb_path, from_dt=None, to_dt=None, log=None):
         cursor = conn.cursor()
         device_map = {}
         try:
-            cursor.execute("SELECT DeviceId, DeviceName FROM Devices")
+            cursor.execute("SELECT DeviceId, DeviceFName FROM Devices")
             for r in cursor.fetchall():
                 device_map[str(int(r[0])) if r[0] else ""] = str(r[1]).strip()
         except: pass
@@ -94,11 +94,14 @@ def fetch_punches(mdb_path, from_dt=None, to_dt=None, log=None):
 def push_data(url, user, pwd, punches, log=None):
     try:
         import requests
-        r = requests.post(url,json={"data":punches},auth=(user,pwd),timeout=30)
-        write_log(f"HTTP {r.status_code}: {r.text[:200]}",log)
-        return r.status_code in (200,201)
+        write_log(f"Sending {len(punches)} records to server...", log)
+        r = requests.post(url, json={"data": punches},
+                          auth=(user, pwd), timeout=60)
+        write_log(f"HTTP {r.status_code}: {r.text[:200]}", log)
+        return r.status_code in (200, 201)
     except Exception as e:
-        write_log(f"Push error: {e}",log); return False
+        write_log(f"Push error: {e}", log)
+        return False
 
 def get_exe_path():
     return sys.executable if getattr(sys,'frozen',False) else os.path.abspath(__file__)
